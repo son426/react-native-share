@@ -15,37 +15,63 @@ static const NSTimeInterval CLIPBOARD_RETRY_DELAY = 0.75; // Gap Time for Retryi
 RCT_EXPORT_MODULE();
 
 - (void)cleanupPendingRestore {
+    RCTLogInfo(@"[Clipboard] Cleaning up pending restore");
+    RCTLogInfo(@"[Clipboard] Previous pendingClipboardRestore: %@", self.pendingClipboardRestore ?: @"<empty>");
+    
     self.pendingClipboardRestore = nil;
     self.isRestoringClipboard = NO;
+    
+    RCTLogInfo(@"[Clipboard] Cleanup complete - isRestoringClipboard: NO");
 }
 
 - (void)restoreClipboardContent:(NSString *)content withRetry:(int)retryCount {
+    RCTLogInfo(@"[Clipboard] Attempting to restore clipboard. Retry count: %d", retryCount);
+    RCTLogInfo(@"[Clipboard] Content to restore: %@", content ?: @"<empty>");
+
+
     if (content == nil || retryCount <= 0) {
+        RCTLogInfo(@"[Clipboard] Ending restore attempts - %@", 
+            content == nil ? @"content is nil" : @"no more retries");
+
         [self cleanupPendingRestore];
         return;
     }
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(CLIPBOARD_RETRY_DELAY * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        RCTLogInfo(@"[Clipboard] Setting clipboard content after %.2f second delay", CLIPBOARD_RETRY_DELAY);
         [[UIPasteboard generalPasteboard] setString:content];
-        
+
+        NSString *currentClipboard = [UIPasteboard generalPasteboard].string;
+        RCTLogInfo(@"[Clipboard] Current clipboard content after set: %@", currentClipboard ?: @"<empty>");
+
         // 클립보드 복원 확인
-        if (![content isEqualToString:[UIPasteboard generalPasteboard].string]) {
+        if (![content isEqualToString:currentClipboard]) {
+            RCTLogInfo(@"[Clipboard] Restore failed - content mismatch. Retrying...");
             [self restoreClipboardContent:content withRetry:retryCount - 1];
         } else {
+            RCTLogInfo(@"[Clipboard] Restore successful!");
             [self cleanupPendingRestore];
         }
     });
 }
 
 - (void)safeRestoreClipboard:(NSString *)content {
+    RCTLogInfo(@"[Clipboard] Entering safeRestoreClipboard");
+    RCTLogInfo(@"[Clipboard] Current isRestoringClipboard state: %@", self.isRestoringClipboard ? @"YES" : @"NO");
+    RCTLogInfo(@"[Clipboard] Content to restore: %@", content ?: @"<empty>");
+
     if (self.isRestoringClipboard) {
+        RCTLogInfo(@"[Clipboard] Previous restore operation in progress, cleaning up");
         [self cleanupPendingRestore];
     }
     
     if (content != nil) {
+        RCTLogInfo(@"[Clipboard] Starting new restore operation");
         self.pendingClipboardRestore = content;
         self.isRestoringClipboard = YES;
         [self restoreClipboardContent:content withRetry:3];
+    } else {
+        RCTLogInfo(@"[Clipboard] No content to restore, skipping");
     }
 }
 
@@ -63,6 +89,7 @@ RCT_EXPORT_MODULE();
     [[UIPasteboard generalPasteboard] setItems:pasteboardItems options:pasteboardOptions];
     [[UIApplication sharedApplication] openURL:urlScheme options:@{} completionHandler:^(BOOL success) {
         if (success) {
+            RCTLogInfo(@"[Clipboard] Instagram URL opened successfully, scheduling clipboard restore in %.1f seconds", CLIPBOARD_RESTORE_DELAY);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(CLIPBOARD_RESTORE_DELAY * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [self safeRestoreClipboard:previousClipboardContent];
             });
