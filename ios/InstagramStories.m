@@ -7,6 +7,9 @@
 @property (nonatomic, assign) BOOL isRestoringClipboard;
 @end
 
+static const NSTimeInterval CLIPBOARD_RESTORE_DELAY = 1.5; // Delay Time for Restoring Clipboard
+static const NSTimeInterval CLIPBOARD_RETRY_DELAY = 0.75; // Gap Time for Retrying Restoring Clipboard
+
 @implementation InstagramStories
 
 RCT_EXPORT_MODULE();
@@ -22,7 +25,7 @@ RCT_EXPORT_MODULE();
         return;
     }
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(CLIPBOARD_RETRY_DELAY * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [[UIPasteboard generalPasteboard] setString:content];
         
         // 클립보드 복원 확인
@@ -60,7 +63,9 @@ RCT_EXPORT_MODULE();
     [[UIPasteboard generalPasteboard] setItems:pasteboardItems options:pasteboardOptions];
     [[UIApplication sharedApplication] openURL:urlScheme options:@{} completionHandler:^(BOOL success) {
         if (success) {
-            [self safeRestoreClipboard:previousClipboardContent];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(CLIPBOARD_RESTORE_DELAY * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self safeRestoreClipboard:previousClipboardContent];
+            });
             resolve(@[@true, @""]);
         } else {
             reject(@"open_url_error", @"Failed to open Instagram", nil);
